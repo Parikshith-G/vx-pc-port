@@ -1,7 +1,7 @@
 """
-Role: Mobile-style media library and folder discovery navigator.
-Responsibility: Automatically discovers, groups, and lists video folders and files without manual folder picking.
-Details: Provides 2-tab navigation (Folders / All Videos), natural sorting, search filtering, and background scanning.
+Role: Progressive media library and folder discovery navigator.
+Responsibility: Incrementally discovers and displays video folders and files without freezing or high CPU usage.
+Details: Shows real-time scanning path in top status bar, supports cancellation, batched rendering, and natural sorting.
 """
 
 import os
@@ -10,8 +10,10 @@ from tkinter import filedialog
 from typing import Callable, Dict, List, Optional
 import customtkinter as ctk  # type: ignore
 
-from core.media_scanner import MediaScanner
+from core.media_scanner import ProgressiveMediaScanner
 from core.natural_sort import natural_sort_key
+
+BATCH_PAGE_SIZE = 40  # Render videos in batches to keep UI responsive and prevent high CPU usage
 
 
 def format_file_size(size_bytes: int) -> str:
@@ -24,7 +26,7 @@ def format_file_size(size_bytes: int) -> str:
 
 
 class LibraryView(ctk.CTkFrame):
-    """Media library browser with mobile-style automatic folder discovery, Folders/All Videos tabs, and search."""
+    """Media library browser with incremental folder discovery, live scan status, and batched rendering."""
 
     def __init__(
         self,
@@ -45,12 +47,13 @@ class LibraryView(ctk.CTkFrame):
 
         # State
         self.active_tab: str = "folders"  # "folders" | "all_videos"
-        self.current_folder: Optional[str] = None  # None = root folder list; str = inside specific folder
+        self.current_folder: Optional[str] = None  # None = root folder list; str = inside folder
         self.folders_dict: Dict[str, List[str]] = {}  # folder_path -> [video_paths]
-        self.all_videos_list: List[str] = []
-        self.is_scanning: bool = False
+        self.visible_video_limit: int = BATCH_PAGE_SIZE
 
-        self.scanner = MediaScanner(additional_roots=self.recent_folders_getter())
+        self.scanner = ProgressiveMediaScanner(additional_roots=self.recent_folders_getter())
+        self.scan_thread: Optional[threading.Thread] = None
+
         self._build_ui()
         self.start_rescan()
 
@@ -79,14 +82,14 @@ class LibraryView(ctk.CTkFrame):
         self.tab_segmented.set("📁 Folders")
         self.tab_segmented.pack(side="left", padx=10)
 
-        # Action Buttons
-        self.btn_rescan = ctk.CTkButton(
+        # Scan & Action Buttons
+        self.btn_scan_toggle = ctk.CTkButton(
             toolbar, text="🔄 Rescan", width=85, height=30,
             fg_color="#262626", hover_color="#383838",
             font=("Segoe UI", 11),
-            command=self.start_rescan
+            command=self._toggle_scan
         )
-        self.btn_rescan.pack(side="left", padx=4)
+        self.btn_scan_toggle.pack(side="left", padx=4)
 
         btn_folder = ctk.CTkButton(
             toolbar, text="📁 Add Folder", width=95, height=30,
@@ -109,10 +112,10 @@ class LibraryView(ctk.CTkFrame):
             toolbar, placeholder_text="Search videos or folders...", width=220, height=30
         )
         self.search_entry.pack(side="right", padx=16)
-        self.search_entry.bind("<KeyRelease>", lambda e: self._render_current_view())
+        self.search_entry.bind("<KeyRelease>", lambda e: self._on_search_updated())
 
-        # 2. Sub-navigation / Breadcrumb status bar
-        self.status_bar = ctk.CTkFrame(self, fg_color="#1A1A1A", height=36, corner_radius=0)
+        # 2. Real-time Live Scan Status Bar
+        self.status_bar = ctk.CTkFrame(self, fg_color="#1A1A1A", height=38, corner_radius=0)
         self.status_bar.pack(fill="x")
 
         self.btn_back_folder = ctk.CTkButton(
@@ -123,7 +126,7 @@ class LibraryView(ctk.CTkFrame):
         )
 
         self.lbl_path = ctk.CTkLabel(
-            self.status_bar, text="Scanning for device video folders...",
+            self.status_bar, text="Ready",
             font=("Segoe UI", 11), text_color="#A0A0A0"
         )
         self.lbl_path.pack(side="left", padx=14)
@@ -138,60 +141,99 @@ class LibraryView(ctk.CTkFrame):
         self.scroll_list.pack(fill="both", expand=True, padx=14, pady=10)
 
     # --------------------------------------------------------------------------
-    # Scanning & Data Management
+    # Incremental Scanning & Live UI Feedback
     # --------------------------------------------------------------------------
 
+    def _toggle_scan(self) -> None:
+        if self.scanner.is_scanning:
+            self.scanner.stop()
+            self.btn_scan_toggle.configure(text="🔄 Rescan", fg_color="#262626")
+            self.lbl_path.configure(text="⏹ Scan stopped by user")
+        else:
+            self.start_rescan()
+
     def start_rescan(self) -> None:
-        """Runs the media scanner asynchronously in a background thread."""
-        if self.is_scanning:
+        """Starts an incremental background scan showing real-time scanning paths."""
+        if self.scanner.is_scanning:
             return
-        self.is_scanning = True
-        self.btn_rescan.configure(text="Scanning...", state="disabled")
-        self.lbl_path.configure(text="Scanning drives and library folders for videos...")
+
+        self.btn_scan_toggle.configure(text="⏹ Stop Scan", fg_color="#A02020", hover_color="#C02828")
+        self.lbl_path.configure(text="🔍 Initializing scan...")
+
+        def _on_status_thread(current_path: str):
+            # Shorten display path if too long
+            short_p = current_path if len(current_path) < 65 else "..." + current_path[-62:]
+            self.after(0, self._update_scan_status, short_p)
+
+        def _on_folder_found_thread(folder_path: str, videos: List[str]):
+            self.after(0, self._add_discovered_folder, folder_path, videos)
+
+        def _on_finished_thread(total_f: int, total_v: int):
+            self.after(0, self._on_scan_finished, total_f, total_v)
 
         def _worker():
-            try:
-                results = self.scanner.scan_all()
-                all_vids = MediaScanner.get_all_videos_list(results)
-            except Exception:
-                results = {}
-                all_vids = []
+            self.scanner.scan(
+                on_status=_on_status_thread,
+                on_folder_found=_on_folder_found_thread,
+                on_finished=_on_finished_thread
+            )
 
-            # Post results back to Tkinter main thread
-            self.after(0, self._on_scan_completed, results, all_vids)
+        self.scan_thread = threading.Thread(target=_worker, daemon=True)
+        self.scan_thread.start()
 
-        thread = threading.Thread(target=_worker, daemon=True)
-        thread.start()
+    def _update_scan_status(self, short_path: str) -> None:
+        if self.scanner.is_scanning:
+            total_f = len(self.folders_dict)
+            total_v = sum(len(v) for v in self.folders_dict.values())
+            self.lbl_path.configure(text=f"🔍 Scanning: {short_path}")
+            self.lbl_count.configure(text=f"{total_f} folders · {total_v} videos")
 
-    def _on_scan_completed(self, results: Dict[str, List[str]], all_vids: List[str]) -> None:
-        self.is_scanning = False
-        self.btn_rescan.configure(text="🔄 Rescan", state="normal")
-        self.folders_dict = results
-        self.all_videos_list = all_vids
+    def _add_discovered_folder(self, folder_path: str, videos: List[str]) -> None:
+        self.folders_dict[folder_path] = videos
+        # Throttled UI redraw to keep CPU calm
+        if not hasattr(self, "_render_timer") or self._render_timer is None:
+            self._render_timer = self.after(120, self._throttled_scan_render)
 
-        # Notify recent folders manager
-        for folder in self.folders_dict.keys():
-            self.on_folder_selected(folder)
+    def _throttled_scan_render(self) -> None:
+        self._render_timer = None
+        if self.active_tab == "folders" and self.current_folder is None:
+            self._render_current_view()
 
+    def _on_scan_finished(self, total_folders: int, total_videos: int) -> None:
+        self.btn_scan_toggle.configure(text="🔄 Rescan", fg_color="#262626", hover_color="#383838")
+        total_f = len(self.folders_dict)
+        total_v = sum(len(v) for v in self.folders_dict.values())
+        self.lbl_path.configure(text=f"✓ Scan completed · {total_f} video folders found")
+        self.lbl_count.configure(text=f"{total_f} folders · {total_v} videos")
         self._render_current_view()
 
+    # --------------------------------------------------------------------------
+    # Navigation & Interaction
+    # --------------------------------------------------------------------------
+
     def _on_tab_changed(self, value: str) -> None:
+        self.visible_video_limit = BATCH_PAGE_SIZE
         if "Folders" in value:
             self.active_tab = "folders"
-            self.current_folder = None  # Reset to root folders list
+            self.current_folder = None
         else:
             self.active_tab = "all_videos"
             self.current_folder = None
         self._render_current_view()
 
+    def _on_search_updated(self) -> None:
+        self.visible_video_limit = BATCH_PAGE_SIZE
+        self._render_current_view()
+
     def _exit_folder_detail(self) -> None:
         self.current_folder = None
+        self.visible_video_limit = BATCH_PAGE_SIZE
         self._render_current_view()
 
     def _browse_folder(self) -> None:
         chosen = filedialog.askdirectory(title="Add Video Folder to Library")
         if chosen and os.path.isdir(chosen):
-            self.scanner.add_root(chosen)
+            self.scanner.add_custom_folder(chosen)
             self.start_rescan()
 
     def _browse_file(self) -> None:
@@ -199,7 +241,7 @@ class LibraryView(ctk.CTkFrame):
         chosen = filedialog.askopenfilename(title="Select Video File", filetypes=filetypes)
         if chosen and os.path.isfile(chosen):
             folder = os.path.dirname(chosen)
-            self.scanner.add_root(folder)
+            self.scanner.add_custom_folder(folder)
             self.current_folder = os.path.normpath(folder)
             self.active_tab = "folders"
             self.tab_segmented.set("📁 Folders")
@@ -213,6 +255,7 @@ class LibraryView(ctk.CTkFrame):
         self.current_folder = norm
         self.active_tab = "folders"
         self.tab_segmented.set("📁 Folders")
+        self.visible_video_limit = BATCH_PAGE_SIZE
         self.on_folder_selected(norm)
 
         # Quick scan if not present
@@ -257,7 +300,8 @@ class LibraryView(ctk.CTkFrame):
 
     def _render_folders_list_view(self, query: str) -> None:
         self.btn_back_folder.pack_forget()
-        self.lbl_path.configure(text="📁 Discovered Device Video Folders")
+        if not self.scanner.is_scanning:
+            self.lbl_path.configure(text="📁 Discovered Device Video Folders")
 
         folder_items = []
         for fpath, vids in self.folders_dict.items():
@@ -272,11 +316,13 @@ class LibraryView(ctk.CTkFrame):
         self.lbl_count.configure(text=f"{len(folder_items)} folders · {total_vids} videos")
 
         if not folder_items:
-            msg = "No video folders discovered yet." if not query else f"No folders matching '{query}'"
+            msg = "Searching for video folders..." if self.scanner.is_scanning else "No video folders discovered yet."
+            if query:
+                msg = f"No folders matching '{query}'"
             frame = ctk.CTkFrame(self.scroll_list, fg_color="transparent")
             frame.pack(pady=50)
             ctk.CTkLabel(frame, text=msg, font=("Segoe UI", 13), text_color="#707070").pack()
-            if not query:
+            if not query and not self.scanner.is_scanning:
                 ctk.CTkButton(
                     frame, text="📁 Add Folder to Scan", fg_color="#262626", hover_color="#383838",
                     command=self._browse_folder
@@ -287,7 +333,7 @@ class LibraryView(ctk.CTkFrame):
             self._create_folder_card(name, fpath, count)
 
     def _create_folder_card(self, name: str, fpath: str, count: int) -> None:
-        card = ctk.CTkFrame(self.scroll_list, fg_color="#1E1E1E", hover_color="#252525", corner_radius=8, height=60)
+        card = ctk.CTkFrame(self.scroll_list, fg_color="#1E1E1E", corner_radius=8, height=60)
         card.pack(fill="x", pady=4)
 
         icon = ctk.CTkLabel(card, text="📁", font=("Segoe UI", 20))
@@ -311,7 +357,6 @@ class LibraryView(ctk.CTkFrame):
         lbl_path = ctk.CTkLabel(info_box, text=fpath, font=("Segoe UI", 10), text_color="#808080", anchor="w")
         lbl_path.pack(fill="x")
 
-        # Open action button
         btn_open = ctk.CTkButton(
             card, text="Open ➔", width=75, height=28,
             fg_color="#282828", hover_color="#FF8C00", font=("Segoe UI", 10, "bold"),
@@ -319,7 +364,7 @@ class LibraryView(ctk.CTkFrame):
         )
         btn_open.pack(side="right", padx=14)
 
-        # Entire card is clickable
+        # Card click handler
         click_cmd = lambda e=None, p=fpath: self._enter_folder(p)
         card.bind("<Button-1>", click_cmd)
         icon.bind("<Button-1>", click_cmd)
@@ -330,6 +375,7 @@ class LibraryView(ctk.CTkFrame):
 
     def _enter_folder(self, fpath: str) -> None:
         self.current_folder = fpath
+        self.visible_video_limit = BATCH_PAGE_SIZE
         self._render_current_view()
 
     # --------------------------------------------------------------------------
@@ -337,23 +383,29 @@ class LibraryView(ctk.CTkFrame):
     # --------------------------------------------------------------------------
 
     def _render_folder_detail_view(self, query: str) -> None:
-        folder_name = os.path.basename(self.current_folder) if self.current_folder else "Folder"
         self.btn_back_folder.pack(side="left", padx=(10, 4))
         self.lbl_path.configure(text=f"📂 {self.current_folder}")
 
-        videos = self.folders_dict.get(self.current_folder, [])
+        all_in_folder = self.folders_dict.get(self.current_folder, [])
+        videos = all_in_folder
         if query:
             videos = [v for v in videos if query in os.path.basename(v).lower()]
 
-        self.lbl_count.configure(text=f"{len(videos)} videos")
+        total_count = len(videos)
+        self.lbl_count.configure(text=f"{total_count} videos")
 
         if not videos:
             msg = "No videos in this folder" if not query else "No matching videos found"
             ctk.CTkLabel(self.scroll_list, text=msg, font=("Segoe UI", 13), text_color="#707070").pack(pady=40)
             return
 
-        for vid in videos:
-            self._create_video_row(vid, context_videos=self.folders_dict.get(self.current_folder, []))
+        # Render up to visible_video_limit items to prevent Tkinter freezing
+        showing_vids = videos[:self.visible_video_limit]
+        for vid in showing_vids:
+            self._create_video_row(vid, context_videos=all_in_folder)
+
+        if total_count > self.visible_video_limit:
+            self._create_load_more_button(total_count)
 
     # --------------------------------------------------------------------------
     # 3. All Videos View (Unified flat library)
@@ -363,19 +415,48 @@ class LibraryView(ctk.CTkFrame):
         self.btn_back_folder.pack_forget()
         self.lbl_path.configure(text="🎬 All Videos (Device Library)")
 
-        videos = self.all_videos_list
+        all_vids = []
+        for vids in self.folders_dict.values():
+            all_vids.extend(vids)
+        all_vids = list(dict.fromkeys(all_vids))
+        all_vids.sort(key=lambda p: natural_sort_key(os.path.basename(p)))
+
+        videos = all_vids
         if query:
             videos = [v for v in videos if query in os.path.basename(v).lower()]
 
-        self.lbl_count.configure(text=f"{len(videos)} videos")
+        total_count = len(videos)
+        self.lbl_count.configure(text=f"{total_count} videos")
 
         if not videos:
-            msg = "No videos discovered on device." if not query else f"No videos matching '{query}'"
+            msg = "Scanning device for videos..." if self.scanner.is_scanning else "No videos discovered."
+            if query:
+                msg = f"No videos matching '{query}'"
             ctk.CTkLabel(self.scroll_list, text=msg, font=("Segoe UI", 13), text_color="#707070").pack(pady=40)
             return
 
-        for vid in videos:
+        showing_vids = videos[:self.visible_video_limit]
+        for vid in showing_vids:
             self._create_video_row(vid, context_videos=videos, show_folder_tag=True)
+
+        if total_count > self.visible_video_limit:
+            self._create_load_more_button(total_count)
+
+    def _create_load_more_button(self, total_count: int) -> None:
+        remaining = total_count - self.visible_video_limit
+        next_count = min(BATCH_PAGE_SIZE, remaining)
+        btn_more = ctk.CTkButton(
+            self.scroll_list,
+            text=f"⬇ Load {next_count} More Videos ({self.visible_video_limit} of {total_count})",
+            height=36, fg_color="#242424", hover_color="#333333",
+            font=("Segoe UI", 11, "bold"),
+            command=self._load_more_videos
+        )
+        btn_more.pack(fill="x", pady=10)
+
+    def _load_more_videos(self) -> None:
+        self.visible_video_limit += BATCH_PAGE_SIZE
+        self._render_current_view()
 
     # --------------------------------------------------------------------------
     # Video Row Card

@@ -137,7 +137,7 @@ class TestVxPlayerDesktop(unittest.TestCase):
             app.destroy()
 
     def test_media_scanner_grouping(self):
-        from core.media_scanner import MediaScanner, scan_directory
+        from core.media_scanner import ProgressiveMediaScanner
         temp_dir = tempfile.mkdtemp()
         try:
             folder1 = os.path.join(temp_dir, "Folder A")
@@ -151,22 +151,34 @@ class TestVxPlayerDesktop(unittest.TestCase):
             open(os.path.join(folder2, "movie.mp4"), "w").close()
             open(os.path.join(folder2, "readme.txt"), "w").close()  # Non-video
 
-            scanner = MediaScanner(additional_roots=[temp_dir])
-            found = scan_directory(temp_dir, max_depth=3)
+            scanner = ProgressiveMediaScanner()
+            scanner.roots = [temp_dir]
 
-            self.assertIn(os.path.normpath(folder1), [os.path.normpath(k) for k in found.keys()])
-            self.assertIn(os.path.normpath(folder2), [os.path.normpath(k) for k in found.keys()])
+            found_folders = {}
+            status_updates = []
+            
+            def on_status(path):
+                status_updates.append(path)
+
+            def on_folder_found(folder, videos):
+                found_folders[folder] = videos
+
+            def on_finished(tf, tv):
+                pass
+
+            scanner.scan(on_status, on_folder_found, on_finished)
+
+            self.assertIn(os.path.normpath(folder1), [os.path.normpath(k) for k in found_folders.keys()])
+            self.assertIn(os.path.normpath(folder2), [os.path.normpath(k) for k in found_folders.keys()])
 
             # Ensure natural sorting in folder1 (animename_2 before animename_1000)
-            f1_vids = [os.path.basename(v) for v in found[folder1]]
+            f1_vids = [os.path.basename(v) for v in found_folders[os.path.normpath(folder1)]]
             self.assertEqual(f1_vids, ["animename_2.mkv", "animename_1000.mkv"])
 
             # Ensure non-video is ignored in folder2
-            f2_vids = [os.path.basename(v) for v in found[folder2]]
+            f2_vids = [os.path.basename(v) for v in found_folders[os.path.normpath(folder2)]]
             self.assertEqual(f2_vids, ["movie.mp4"])
-
-            all_vids = MediaScanner.get_all_videos_list(found)
-            self.assertEqual(len(all_vids), 3)
+            self.assertTrue(len(status_updates) > 0)
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
