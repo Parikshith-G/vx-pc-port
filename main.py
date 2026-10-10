@@ -59,10 +59,14 @@ class VxPlayerApp(ctk.CTk):
         self._bind_shortcuts()
         self._start_progress_loop()
 
-        # Load last folder if available
-        last_dir = self.history.get_last_folder()
-        if last_dir and os.path.isdir(last_dir):
-            self.library_view.load_folder(last_dir)
+        # If CLI file argument was provided, launch it directly; otherwise show mobile-style discovery library
+        if len(sys.argv) > 1:
+            arg_path = os.path.normpath(sys.argv[1])
+            if os.path.isfile(arg_path):
+                folder = os.path.dirname(arg_path)
+                self.library_view.load_folder(folder, play_target=arg_path)
+            elif os.path.isdir(arg_path):
+                self.library_view.load_folder(arg_path)
 
     def _build_ui(self) -> None:
         self.container = ctk.CTkFrame(self, fg_color="#0D0D0D", corner_radius=0)

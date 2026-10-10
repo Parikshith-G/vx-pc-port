@@ -136,6 +136,41 @@ class TestVxPlayerDesktop(unittest.TestCase):
         finally:
             app.destroy()
 
+    def test_media_scanner_grouping(self):
+        from core.media_scanner import MediaScanner, scan_directory
+        temp_dir = tempfile.mkdtemp()
+        try:
+            folder1 = os.path.join(temp_dir, "Folder A")
+            folder2 = os.path.join(temp_dir, "Folder B")
+            os.makedirs(folder1, exist_ok=True)
+            os.makedirs(folder2, exist_ok=True)
+
+            # Create test dummy videos
+            open(os.path.join(folder1, "animename_1000.mkv"), "w").close()
+            open(os.path.join(folder1, "animename_2.mkv"), "w").close()
+            open(os.path.join(folder2, "movie.mp4"), "w").close()
+            open(os.path.join(folder2, "readme.txt"), "w").close()  # Non-video
+
+            scanner = MediaScanner(additional_roots=[temp_dir])
+            found = scan_directory(temp_dir, max_depth=3)
+
+            self.assertIn(os.path.normpath(folder1), [os.path.normpath(k) for k in found.keys()])
+            self.assertIn(os.path.normpath(folder2), [os.path.normpath(k) for k in found.keys()])
+
+            # Ensure natural sorting in folder1 (animename_2 before animename_1000)
+            f1_vids = [os.path.basename(v) for v in found[folder1]]
+            self.assertEqual(f1_vids, ["animename_2.mkv", "animename_1000.mkv"])
+
+            # Ensure non-video is ignored in folder2
+            f2_vids = [os.path.basename(v) for v in found[folder2]]
+            self.assertEqual(f2_vids, ["movie.mp4"])
+
+            all_vids = MediaScanner.get_all_videos_list(found)
+            self.assertEqual(len(all_vids), 3)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
+
