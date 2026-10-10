@@ -110,10 +110,40 @@ class LibraryView(ctk.CTkFrame):
 
         # Search Bar
         self.search_entry = ctk.CTkEntry(
-            toolbar, placeholder_text="Search videos or folders...", width=220, height=30
+            toolbar, placeholder_text="Search videos or folders...", width=190, height=30
         )
-        self.search_entry.pack(side="right", padx=16)
+        self.search_entry.pack(side="right", padx=(4, 16))
         self.search_entry.bind("<KeyRelease>", lambda e: self._on_search_updated())
+
+        # Sort Dropdown
+        self.sort_option = ctk.CTkOptionMenu(
+            toolbar,
+            values=[
+                "Name (A-Z)",
+                "Name (Z-A)",
+                "Date (Newest)",
+                "Date (Oldest)",
+                "Size (Largest)",
+                "Size (Smallest)"
+            ],
+            width=130,
+            height=30,
+            fg_color="#262626",
+            button_color="#333333",
+            button_hover_color="#404040",
+            dropdown_fg_color="#222222",
+            dropdown_hover_color="#383838",
+            font=("Segoe UI", 11),
+            dropdown_font=("Segoe UI", 11),
+            command=self._on_sort_changed
+        )
+        self.sort_option.set("Name (A-Z)")
+        self.sort_option.pack(side="right", padx=(4, 4))
+
+        lbl_sort = ctk.CTkLabel(
+            toolbar, text="Sort:", font=("Segoe UI", 11), text_color="#A0A0A0"
+        )
+        lbl_sort.pack(side="right", padx=(8, 2))
 
         # 2. Real-time Live Scan Status Bar
         self.status_bar = ctk.CTkFrame(self, fg_color="#1A1A1A", height=38, corner_radius=0)
@@ -225,6 +255,64 @@ class LibraryView(ctk.CTkFrame):
         self.visible_video_limit = BATCH_PAGE_SIZE
         self._render_current_view()
 
+    def _on_sort_changed(self, _choice: str = "") -> None:
+        self.visible_video_limit = BATCH_PAGE_SIZE
+        self._render_current_view()
+
+    def _safe_mtime(self, path: str) -> float:
+        try:
+            return os.path.getmtime(path)
+        except Exception:
+            return 0.0
+
+    def _safe_size(self, path: str) -> int:
+        try:
+            return os.path.getsize(path)
+        except Exception:
+            return 0
+
+    def _safe_folder_size(self, folder_path: str) -> int:
+        vids = self.folders_dict.get(folder_path, [])
+        total = 0
+        for v in vids:
+            try:
+                total += os.path.getsize(v)
+            except Exception:
+                pass
+        return total
+
+    def _sort_folders(self, folder_items: List[tuple]) -> List[tuple]:
+        mode = self.sort_option.get()
+        if mode == "Name (A-Z)":
+            return sorted(folder_items, key=lambda it: natural_sort_key(it[0]))
+        elif mode == "Name (Z-A)":
+            return sorted(folder_items, key=lambda it: natural_sort_key(it[0]), reverse=True)
+        elif mode == "Date (Newest)":
+            return sorted(folder_items, key=lambda it: self._safe_mtime(it[1]), reverse=True)
+        elif mode == "Date (Oldest)":
+            return sorted(folder_items, key=lambda it: self._safe_mtime(it[1]))
+        elif mode == "Size (Largest)":
+            return sorted(folder_items, key=lambda it: (it[2], self._safe_folder_size(it[1])), reverse=True)
+        elif mode == "Size (Smallest)":
+            return sorted(folder_items, key=lambda it: (it[2], self._safe_folder_size(it[1])))
+        return sorted(folder_items, key=lambda it: natural_sort_key(it[0]))
+
+    def _sort_videos(self, videos: List[str]) -> List[str]:
+        mode = self.sort_option.get()
+        if mode == "Name (A-Z)":
+            return sorted(videos, key=lambda p: natural_sort_key(os.path.basename(p)))
+        elif mode == "Name (Z-A)":
+            return sorted(videos, key=lambda p: natural_sort_key(os.path.basename(p)), reverse=True)
+        elif mode == "Date (Newest)":
+            return sorted(videos, key=lambda p: self._safe_mtime(p), reverse=True)
+        elif mode == "Date (Oldest)":
+            return sorted(videos, key=lambda p: self._safe_mtime(p))
+        elif mode == "Size (Largest)":
+            return sorted(videos, key=lambda p: self._safe_size(p), reverse=True)
+        elif mode == "Size (Smallest)":
+            return sorted(videos, key=lambda p: self._safe_size(p))
+        return sorted(videos, key=lambda p: natural_sort_key(os.path.basename(p)))
+
     def _exit_folder_detail(self) -> None:
         self.current_folder = None
         self.visible_video_limit = BATCH_PAGE_SIZE
@@ -310,7 +398,7 @@ class LibraryView(ctk.CTkFrame):
                 continue
             folder_items.append((name, fpath, len(vids)))
 
-        folder_items.sort(key=lambda item: natural_sort_key(item[0]))
+        folder_items = self._sort_folders(folder_items)
 
         total_vids = sum(len(v) for v in self.folders_dict.values())
         self.lbl_count.configure(text=f"{len(folder_items)} folders · {total_vids} videos")
@@ -387,7 +475,8 @@ class LibraryView(ctk.CTkFrame):
         self.lbl_path.configure(text=f"📂 {self.current_folder}")
 
         all_in_folder = self.folders_dict.get(self.current_folder, [])
-        videos = all_in_folder
+        sorted_all = self._sort_videos(all_in_folder)
+        videos = sorted_all
         if query:
             videos = [v for v in videos if query in os.path.basename(v).lower()]
 
@@ -402,7 +491,7 @@ class LibraryView(ctk.CTkFrame):
         # Render up to visible_video_limit items to prevent Tkinter freezing
         showing_vids = videos[:self.visible_video_limit]
         for vid in showing_vids:
-            self._create_video_row(vid, context_videos=all_in_folder)
+            self._create_video_row(vid, context_videos=sorted_all)
 
         if total_count > self.visible_video_limit:
             self._create_load_more_button(total_count)
@@ -419,7 +508,7 @@ class LibraryView(ctk.CTkFrame):
         for vids in self.folders_dict.values():
             all_vids.extend(vids)
         all_vids = list(dict.fromkeys(all_vids))
-        all_vids.sort(key=lambda p: natural_sort_key(os.path.basename(p)))
+        all_vids = self._sort_videos(all_vids)
 
         videos = all_vids
         if query:

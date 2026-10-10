@@ -182,6 +182,34 @@ class TestVxPlayerDesktop(unittest.TestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_library_view_sorting(self):
+        from main import VxPlayerApp
+        app = VxPlayerApp()
+        try:
+            lib = app.library_view
+            files = ["ep_10.mp4", "ep_2.mp4", "ep_1.mp4"]
+            
+            # Name (A-Z)
+            lib.sort_option.set("Name (A-Z)")
+            self.assertEqual(lib._sort_videos(files), ["ep_1.mp4", "ep_2.mp4", "ep_10.mp4"])
+
+            # Name (Z-A)
+            lib.sort_option.set("Name (Z-A)")
+            self.assertEqual(lib._sort_videos(files), ["ep_10.mp4", "ep_2.mp4", "ep_1.mp4"])
+
+            # Folders sorting
+            folders = [("Z Folder", "d:/z", 5), ("A Folder", "d:/a", 20)]
+            lib.sort_option.set("Name (A-Z)")
+            self.assertEqual([f[0] for f in lib._sort_folders(folders)], ["A Folder", "Z Folder"])
+
+            lib.sort_option.set("Size (Largest)")
+            self.assertEqual([f[0] for f in lib._sort_folders(folders)], ["A Folder", "Z Folder"])
+
+            lib.sort_option.set("Size (Smallest)")
+            self.assertEqual([f[0] for f in lib._sort_folders(folders)], ["Z Folder", "A Folder"])
+        finally:
+            app.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()
