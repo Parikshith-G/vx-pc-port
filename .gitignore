@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller / Build artifacts
+build/
+dist/
+*.spec
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
+
+# User & OS files
+.DS_Store
+Thumbs.db
+*.lnk
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
