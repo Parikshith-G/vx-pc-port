@@ -17,7 +17,11 @@ A high-performance, dark-themed offline desktop video player built for anime ent
 - **Immediate Speed Control**: Tweak playback in real time with `D` (+0.1x) and `S` (-0.1x).
 - **Anime OP Skip (+90s)**: Jump through 90-second anime opening themes in a single tap (`O`).
 - **Zero-Resize Overlay HUD**: Controls and header float directly on top of the 100% video surface (`place` + `lift`). The video canvas never twitches, jitters, or resizes when controls appear or hide.
-- **Natural Alphanumeric Sorting**: Correctly sequences files naturally (`Episode 2` before `Episode 1000`, `ep_02` before `ep_10`).
+- **Progressive Folder Discovery & Tabs**: Automatically indexes local video folders in the background with live scan status in the header, tab switching between Folders and All Videos, and batched UI rendering to eliminate CPU spikes.
+- **Folder and File Sorting**: Built-in dropdown selector to sort folders and videos by:
+  - **Name (A-Z / Z-A)**: Natural alphanumeric sorting (`Episode 2` before `Episode 10`).
+  - **Date (Newest / Oldest)**: Last modified timestamps.
+  - **Size (Largest / Smallest)**: File sizes or folder video counts.
 - **Complete Codec & Subtitle Compatibility**: Powered by LibVLC, natively plays 10-bit Hi10P MKV, HEVC/H.265, AV1, VP9, WebM, styled ASS/SSA anime subtitles, and embedded audio tracks.
 - **200% Audio Volume Amplification**: Boost quiet dialogue and audio past 100% up to 200%.
 - **Smart Watch History & Resume Engine**: Automatically saves playback timestamps and marks completed episodes (>95% watched) with visual checkmarks (`✓`).
@@ -51,23 +55,25 @@ A high-performance, dark-themed offline desktop video player built for anime ent
 ## Project Architecture
 
 ```
-vx-pc-port/
+vx-player/desktop/
 ├── main.py                     # Application entry point, Tkinter/VLC coordinator, shortcuts
 ├── core/
 │   ├── history_manager.py      # Watch history, resume positions, and seen status persistence
+│   ├── media_scanner.py        # Progressive background folder crawler with path status
 │   └── natural_sort.py         # Natural alphanumeric sorting algorithm for episode names
 ├── player/
 │   └── vlc_player.py           # LibVLC wrapper: playback, speed (0.1x-8.0x), audio boost, HWND binding
 ├── ui/
 │   ├── controls_bar.py         # Bottom playback HUD: scrubber timeline, volume, speed menu, OP skip
 │   ├── header_bar.py           # Top overlay bar: back button, title, audio/sub selectors, aspect ratio
-│   ├── library_view.py         # Folder/file browser with resume timestamps and seen badges
+│   ├── library_view.py         # Folder/file browser with sort selector, resume timestamps and seen badges
 │   ├── osd.py                  # Borderless floating On-Screen Display pill for real-time visual feedback
 │   └── playlist_panel.py       # Collapsible episode drawer with instant search filtering
 ├── test_desktop.py             # Comprehensive unit tests for sorting, resume tracking, and speed logic
 ├── run.bat                     # Windows one-click batch launcher
 ├── requirements.txt            # Python dependencies
-└── README.md                   # Project documentation
+├── installer.nsi               # NSIS Windows setup installer script
+└── README.md                   # Desktop documentation
 ```
 
 ---
@@ -80,8 +86,8 @@ vx-pc-port/
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/Parikshith-G/vx-pc-port.git
-cd vx-pc-port
+git clone https://github.com/Parikshith-G/vx-player.git
+cd vx-player/desktop
 ```
 
 ### 2. Install Dependencies
@@ -123,7 +129,7 @@ The installer wizard will be created at `dist/VXPlayerSetup.exe`.
 
 ## Running Test Suite
 
-Verify all natural sorting, history persistence, and speed control logic:
+Verify all natural sorting, history persistence, scanner throttling, and speed control logic:
 
 ```bash
 python test_desktop.py
@@ -133,7 +139,7 @@ python test_desktop.py
 
 ## Companion Mobile App
 
-Looking for the native Android version with touch gestures, brightness/volume swipe, picture-in-picture, and circular quick actions? Check out **[VX Player for Android](https://github.com/Parikshith-G/vx-player)**.
+Looking for the native Android version with touch gestures, brightness/volume swipe, picture-in-picture, and circular quick actions? Check out **[VX Player for Android](../mobile/)**.
 
 ---
 
