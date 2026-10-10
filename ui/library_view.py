@@ -6,6 +6,7 @@ Details: Shows real-time scanning path in top status bar, supports cancellation,
 
 import os
 import threading
+import time
 from tkinter import filedialog
 from typing import Callable, Dict, List, Optional
 import customtkinter as ctk  # type: ignore
@@ -149,6 +150,7 @@ class LibraryView(ctk.CTkFrame):
             self.scanner.stop()
             self.btn_scan_toggle.configure(text="🔄 Rescan", fg_color="#262626")
             self.lbl_path.configure(text="⏹ Scan stopped by user")
+            self._render_current_view()
         else:
             self.start_rescan()
 
@@ -159,11 +161,15 @@ class LibraryView(ctk.CTkFrame):
 
         self.btn_scan_toggle.configure(text="⏹ Stop Scan", fg_color="#A02020", hover_color="#C02828")
         self.lbl_path.configure(text="🔍 Initializing scan...")
+        self._last_status_update = 0.0
 
         def _on_status_thread(current_path: str):
-            # Shorten display path if too long
-            short_p = current_path if len(current_path) < 65 else "..." + current_path[-62:]
-            self.after(0, self._update_scan_status, short_p)
+            # Throttle status label updates to max ~10 per second to keep UI completely calm
+            now = time.time()
+            if now - self._last_status_update >= 0.1:
+                self._last_status_update = now
+                short_p = current_path if len(current_path) < 65 else "..." + current_path[-62:]
+                self.after(0, self._update_scan_status, short_p)
 
         def _on_folder_found_thread(folder_path: str, videos: List[str]):
             self.after(0, self._add_discovered_folder, folder_path, videos)
@@ -189,15 +195,8 @@ class LibraryView(ctk.CTkFrame):
             self.lbl_count.configure(text=f"{total_f} folders · {total_v} videos")
 
     def _add_discovered_folder(self, folder_path: str, videos: List[str]) -> None:
+        # Accumulate folder quietly without refreshing UI list during scan
         self.folders_dict[folder_path] = videos
-        # Throttled UI redraw to keep CPU calm
-        if not hasattr(self, "_render_timer") or self._render_timer is None:
-            self._render_timer = self.after(120, self._throttled_scan_render)
-
-    def _throttled_scan_render(self) -> None:
-        self._render_timer = None
-        if self.active_tab == "folders" and self.current_folder is None:
-            self._render_current_view()
 
     def _on_scan_finished(self, total_folders: int, total_videos: int) -> None:
         self.btn_scan_toggle.configure(text="🔄 Rescan", fg_color="#262626", hover_color="#383838")
@@ -205,6 +204,7 @@ class LibraryView(ctk.CTkFrame):
         total_v = sum(len(v) for v in self.folders_dict.values())
         self.lbl_path.configure(text=f"✓ Scan completed · {total_f} video folders found")
         self.lbl_count.configure(text=f"{total_f} folders · {total_v} videos")
+        # Render the UI list once when scan completes
         self._render_current_view()
 
     # --------------------------------------------------------------------------
@@ -237,7 +237,7 @@ class LibraryView(ctk.CTkFrame):
             self.start_rescan()
 
     def _browse_file(self) -> None:
-        filetypes = [("Video files", "*.mp4 *.mkv *.webm *.avi *.mov *.m4v *.ts *.flv"), ("All files", "*.*")]
+        filetypes = [("Video files", "*.mp4 *.mkv *.webm *.avi *.mov *.m4v *.m2ts *.mts *.flv"), ("All files", "*.*")]
         chosen = filedialog.askopenfilename(title="Select Video File", filetypes=filetypes)
         if chosen and os.path.isfile(chosen):
             folder = os.path.dirname(chosen)
@@ -261,7 +261,7 @@ class LibraryView(ctk.CTkFrame):
         # Quick scan if not present
         if norm not in self.folders_dict:
             try:
-                exts = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv", ".wmv", ".ts", ".3gp", ".ogv", ".vob", ".mpg", ".mpeg"}
+                exts = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv", ".wmv", ".3gp", ".ogv", ".vob", ".mpg", ".mpeg", ".m2ts", ".mts"}
                 vids = [
                     entry.path for entry in os.scandir(norm)
                     if entry.is_file() and os.path.splitext(entry.name)[1].lower() in exts

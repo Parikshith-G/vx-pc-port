@@ -12,7 +12,7 @@ from core.natural_sort import natural_sort_key
 
 VIDEO_EXTENSIONS: Set[str] = {
     ".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".flv",
-    ".wmv", ".ts", ".3gp", ".ogv", ".vob", ".mpg", ".mpeg"
+    ".wmv", ".3gp", ".ogv", ".vob", ".mpg", ".mpeg", ".m2ts", ".mts"
 }
 
 IGNORED_DIR_NAMES: Set[str] = {
