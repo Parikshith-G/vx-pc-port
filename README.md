@@ -98,8 +98,9 @@ Or double-click `run.bat` on Windows.
 
 ---
 
-## Building Standalone Executable (`.exe`)
+## Building Standalone Executable & Installer
 
+### 1. Compile Portable Executable (`.exe`)
 To compile VX Player PC into a single portable `.exe` with PyInstaller:
 
 ```bash
@@ -107,7 +108,16 @@ pip install pyinstaller
 python -m PyInstaller --noconsole --onefile --icon app_icon.ico --name "VXPlayerPC" --collect-all customtkinter --hidden-import vlc main.py
 ```
 
-The output executable will be placed in the `dist/` directory.
+The output executable (`VXPlayerPC.exe`) will be placed in the `dist/` directory.
+
+### 2. Build Windows Setup Installer (`VXPlayerSetup.exe`)
+To generate a Windows Setup wizard with "Next -> Next -> Install" flow, Start Menu search integration, Desktop shortcut, and entry in Windows **Installed Apps** (Add or Remove Programs) with an uninstaller:
+
+```bash
+makensis installer.nsi
+```
+
+The installer wizard will be created at `dist/VXPlayerSetup.exe`.
 
 ---
 
