@@ -24,3 +24,10 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Binaries and Models
+bin/
+models/
+*.bin
+*.dll
+*.exe

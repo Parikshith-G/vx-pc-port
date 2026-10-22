@@ -210,6 +210,17 @@ class TestVxPlayerDesktop(unittest.TestCase):
         finally:
             app.destroy()
 
+    def test_subtitle_engine_detection(self):
+        from core.subtitle_engine import SubtitleEngine, WHISPER_MODELS
+        engine = SubtitleEngine()
+        self.assertTrue(engine.is_engine_ready(), "Whisper CLI or VLC not found")
+        self.assertTrue(os.path.isfile(engine.whisper_exe))
+        self.assertIsNotNone(engine.vlc_exe)
+        self.assertTrue(os.path.isfile(engine.vlc_exe))
+        self.assertIn("small", WHISPER_MODELS)
+        self.assertIn("base", WHISPER_MODELS)
+        self.assertIn("tiny", WHISPER_MODELS)
+
 
 if __name__ == "__main__":
     unittest.main()

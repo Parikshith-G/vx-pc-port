@@ -86,7 +86,7 @@ class ControlsBar(ctk.CTkFrame):
         self.left_box = ctk.CTkFrame(self.buttons_row, fg_color="transparent")
         self.left_box.pack(side="left")
 
-        self.vol_icon = ctk.CTkLabel(self.left_box, text="🔊", font=("Segoe UI", 14), text_color="#E0E0E0")
+        self.vol_icon = ctk.CTkLabel(self.left_box, text="Vol", font=("Segoe UI", 11, "bold"), text_color="#E0E0E0")
         self.vol_icon.pack(side="left", padx=(0, 4))
 
         self.vol_slider = ctk.CTkSlider(
@@ -118,39 +118,43 @@ class ControlsBar(ctk.CTkFrame):
         self.center_box.pack(side="left", expand=True)
 
         self.btn_rewind = ctk.CTkButton(
-            self.center_box, text="⟲ 5s", width=46, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            self.center_box, text="-5s", width=46, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            font=("Segoe UI", 11, "bold"),
             command=lambda: self.on_seek_relative(-5000)
         )
         self.btn_rewind.pack(side="left", padx=3)
 
         self.btn_prev = ctk.CTkButton(
-            self.center_box, text="⏮", width=40, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            self.center_box, text="|<", width=40, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            font=("Segoe UI", 11, "bold"),
             command=self.on_prev
         )
         self.btn_prev.pack(side="left", padx=3)
 
         self.btn_play_pause = ctk.CTkButton(
-            self.center_box, text="▶", width=50, height=34, font=("Segoe UI", 16, "bold"),
+            self.center_box, text=">", width=50, height=34, font=("Segoe UI", 16, "bold"),
             fg_color="#FF8C00", hover_color="#FF7F00", text_color="#FFFFFF",
             command=self.on_play_pause
         )
         self.btn_play_pause.pack(side="left", padx=6)
 
         self.btn_next = ctk.CTkButton(
-            self.center_box, text="⏭", width=40, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            self.center_box, text=">|", width=40, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            font=("Segoe UI", 11, "bold"),
             command=self.on_next
         )
         self.btn_next.pack(side="left", padx=3)
 
         self.btn_forward = ctk.CTkButton(
-            self.center_box, text="5s ⟳", width=46, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            self.center_box, text="+5s", width=46, height=30, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            font=("Segoe UI", 11, "bold"),
             command=lambda: self.on_seek_relative(5000)
         )
         self.btn_forward.pack(side="left", padx=3)
 
         # Dedicated Anime OP Skip (+90s) button
         self.btn_skip90 = ctk.CTkButton(
-            self.center_box, text="⏭ +90s OP", width=86, height=30, font=("Segoe UI", 12, "bold"),
+            self.center_box, text="+90s OP", width=86, height=30, font=("Segoe UI", 12, "bold"),
             fg_color="#8A2BE2", hover_color="#9932CC", text_color="#FFFFFF",
             command=self.on_skip_90s
         )
@@ -174,7 +178,8 @@ class ControlsBar(ctk.CTkFrame):
         self.speed_menu.pack(side="left", padx=4)
 
         self.btn_playlist = ctk.CTkButton(
-            self.right_box, text="📑 List", width=60, height=28, fg_color="#2A2A2A", hover_color="#3D3D3D",
+            self.right_box, text="Playlist", width=64, height=28, font=("Segoe UI", 11),
+            fg_color="#2A2A2A", hover_color="#3D3D3D",
             command=self.on_toggle_playlist
         )
         self.btn_playlist.pack(side="left", padx=4)
@@ -212,7 +217,7 @@ class ControlsBar(ctk.CTkFrame):
 
     def update_progress(self, current_ms: int, total_ms: int, is_playing: bool) -> None:
         """Updates progress bar and time labels from player clock."""
-        self.btn_play_pause.configure(text="⏸" if is_playing else "▶")
+        self.btn_play_pause.configure(text="||" if is_playing else ">")
         self.time_current.configure(text=format_time(current_ms))
         self.time_total.configure(text=format_time(total_ms))
 

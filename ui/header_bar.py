@@ -19,6 +19,7 @@ class HeaderBar(ctk.CTkFrame):
         on_select_audio: Callable[[], None],
         on_select_sub: Callable[[], None],
         on_toggle_fullscreen: Callable[[], None],
+        on_generate_ai_sub: Optional[Callable[[], None]] = None,
         **kwargs
     ):
         super().__init__(master, fg_color="#181818", corner_radius=0, height=44, **kwargs)
@@ -27,12 +28,13 @@ class HeaderBar(ctk.CTkFrame):
         self.on_select_audio = on_select_audio
         self.on_select_sub = on_select_sub
         self.on_toggle_fullscreen = on_toggle_fullscreen
+        self.on_generate_ai_sub = on_generate_ai_sub or (lambda: None)
 
         self._build_ui()
 
     def _build_ui(self) -> None:
         self.btn_back = ctk.CTkButton(
-            self, text="← Library", width=75, height=28, font=("Segoe UI", 12),
+            self, text="< Library", width=75, height=28, font=("Segoe UI", 12),
             fg_color="#2A2A2A", hover_color="#3D3D3D", command=self.on_back_to_library
         )
         self.btn_back.pack(side="left", padx=10, pady=8)
@@ -49,20 +51,26 @@ class HeaderBar(ctk.CTkFrame):
         )
         self.btn_aspect.pack(side="right", padx=6)
 
+        self.btn_ai_sub = ctk.CTkButton(
+            self, text="AI Sub", width=62, height=28, font=("Segoe UI", 11, "bold"),
+            fg_color="#1F6AA5", hover_color="#144870", command=self.on_generate_ai_sub
+        )
+        self.btn_ai_sub.pack(side="right", padx=4)
+
         self.btn_sub = ctk.CTkButton(
-            self, text="💬 Sub", width=58, height=28, font=("Segoe UI", 11),
+            self, text="Sub", width=50, height=28, font=("Segoe UI", 11),
             fg_color="#2A2A2A", hover_color="#3D3D3D", command=self.on_select_sub
         )
         self.btn_sub.pack(side="right", padx=4)
 
         self.btn_audio = ctk.CTkButton(
-            self, text="🎧 Audio", width=64, height=28, font=("Segoe UI", 11),
+            self, text="Audio", width=56, height=28, font=("Segoe UI", 11),
             fg_color="#2A2A2A", hover_color="#3D3D3D", command=self.on_select_audio
         )
         self.btn_audio.pack(side="right", padx=4)
 
         self.btn_fullscreen = ctk.CTkButton(
-            self, text="⛶", width=36, height=28, font=("Segoe UI", 14),
+            self, text="[ ]", width=36, height=28, font=("Segoe UI", 12, "bold"),
             fg_color="#2A2A2A", hover_color="#3D3D3D", command=self.on_toggle_fullscreen
         )
         self.btn_fullscreen.pack(side="right", padx=(4, 10))

@@ -37,6 +37,7 @@ class LibraryView(ctk.CTkFrame):
         is_seen_checker: Callable[[str], bool],
         recent_folders_getter: Callable[[], List[str]],
         on_folder_selected: Callable[[str], None],
+        on_generate_ai_subtitles: Optional[Callable[[List[str]], None]] = None,
         **kwargs
     ):
         super().__init__(master, fg_color="#121212", corner_radius=0, **kwargs)
@@ -45,6 +46,7 @@ class LibraryView(ctk.CTkFrame):
         self.is_seen_checker = is_seen_checker
         self.recent_folders_getter = recent_folders_getter
         self.on_folder_selected = on_folder_selected
+        self.on_generate_ai_subtitles = on_generate_ai_subtitles or (lambda v: None)
 
         # State
         self.active_tab: str = "folders"  # "folders" | "all_videos"
@@ -71,7 +73,7 @@ class LibraryView(ctk.CTkFrame):
         # 2-Tab Segmented Switcher (Mobile style: Folders vs All Videos)
         self.tab_segmented = ctk.CTkSegmentedButton(
             toolbar,
-            values=["📁 Folders", "🎬 All Videos"],
+            values=["Folders", "All Videos"],
             command=self._on_tab_changed,
             selected_color="#FF8C00",
             selected_hover_color="#E07B00",
@@ -80,12 +82,12 @@ class LibraryView(ctk.CTkFrame):
             font=("Segoe UI", 11, "bold"),
             height=30
         )
-        self.tab_segmented.set("📁 Folders")
+        self.tab_segmented.set("Folders")
         self.tab_segmented.pack(side="left", padx=10)
 
         # Scan & Action Buttons
         self.btn_scan_toggle = ctk.CTkButton(
-            toolbar, text="🔄 Rescan", width=85, height=30,
+            toolbar, text="Rescan", width=75, height=30,
             fg_color="#262626", hover_color="#383838",
             font=("Segoe UI", 11),
             command=self._toggle_scan
@@ -93,7 +95,7 @@ class LibraryView(ctk.CTkFrame):
         self.btn_scan_toggle.pack(side="left", padx=4)
 
         btn_folder = ctk.CTkButton(
-            toolbar, text="📁 Add Folder", width=95, height=30,
+            toolbar, text="Add Folder", width=85, height=30,
             fg_color="#262626", hover_color="#383838",
             font=("Segoe UI", 11),
             command=self._browse_folder
@@ -101,7 +103,7 @@ class LibraryView(ctk.CTkFrame):
         btn_folder.pack(side="left", padx=4)
 
         btn_file = ctk.CTkButton(
-            toolbar, text="🎬 Open File", width=85, height=30,
+            toolbar, text="Open File", width=80, height=30,
             fg_color="#262626", hover_color="#383838",
             font=("Segoe UI", 11),
             command=self._browse_file
@@ -389,7 +391,7 @@ class LibraryView(ctk.CTkFrame):
     def _render_folders_list_view(self, query: str) -> None:
         self.btn_back_folder.pack_forget()
         if not self.scanner.is_scanning:
-            self.lbl_path.configure(text="📁 Discovered Device Video Folders")
+            self.lbl_path.configure(text="Discovered Device Video Folders")
 
         folder_items = []
         for fpath, vids in self.folders_dict.items():
@@ -412,7 +414,7 @@ class LibraryView(ctk.CTkFrame):
             ctk.CTkLabel(frame, text=msg, font=("Segoe UI", 13), text_color="#707070").pack()
             if not query and not self.scanner.is_scanning:
                 ctk.CTkButton(
-                    frame, text="📁 Add Folder to Scan", fg_color="#262626", hover_color="#383838",
+                    frame, text="Add Folder to Scan", fg_color="#262626", hover_color="#383838",
                     command=self._browse_folder
                 ).pack(pady=10)
             return
@@ -424,7 +426,7 @@ class LibraryView(ctk.CTkFrame):
         card = ctk.CTkFrame(self.scroll_list, fg_color="#1E1E1E", corner_radius=8, height=60)
         card.pack(fill="x", pady=4)
 
-        icon = ctk.CTkLabel(card, text="📁", font=("Segoe UI", 20))
+        icon = ctk.CTkLabel(card, text="[DIR]", font=("Segoe UI", 12, "bold"), text_color="#AAB0BC")
         icon.pack(side="left", padx=(14, 10))
 
         info_box = ctk.CTkFrame(card, fg_color="transparent")
@@ -446,7 +448,7 @@ class LibraryView(ctk.CTkFrame):
         lbl_path.pack(fill="x")
 
         btn_open = ctk.CTkButton(
-            card, text="Open ➔", width=75, height=28,
+            card, text="Open >", width=75, height=28,
             fg_color="#282828", hover_color="#FF8C00", font=("Segoe UI", 10, "bold"),
             command=lambda p=fpath: self._enter_folder(p)
         )
@@ -472,7 +474,7 @@ class LibraryView(ctk.CTkFrame):
 
     def _render_folder_detail_view(self, query: str) -> None:
         self.btn_back_folder.pack(side="left", padx=(10, 4))
-        self.lbl_path.configure(text=f"📂 {self.current_folder}")
+        self.lbl_path.configure(text=f"Folder: {self.current_folder}")
 
         all_in_folder = self.folders_dict.get(self.current_folder, [])
         sorted_all = self._sort_videos(all_in_folder)
@@ -488,6 +490,41 @@ class LibraryView(ctk.CTkFrame):
             ctk.CTkLabel(self.scroll_list, text=msg, font=("Segoe UI", 13), text_color="#707070").pack(pady=40)
             return
 
+        # Folder batch action header
+        batch_header = ctk.CTkFrame(self.scroll_list, fg_color="#181818", corner_radius=6, height=40)
+        batch_header.pack(fill="x", pady=(0, 6))
+
+        ctk.CTkLabel(
+            batch_header,
+            text=f"Batch Actions ({total_count} videos):",
+            font=("Segoe UI", 11, "bold"),
+            text_color="#AAB0BC"
+        ).pack(side="left", padx=12, pady=6)
+
+        btn_batch_play = ctk.CTkButton(
+            batch_header,
+            text="Play All",
+            width=80,
+            height=28,
+            fg_color="#FF8C00",
+            hover_color="#FF7F00",
+            font=("Segoe UI", 11, "bold"),
+            command=lambda: self.on_play_video(sorted_all[0], sorted_all) if sorted_all else None
+        )
+        btn_batch_play.pack(side="right", padx=(4, 10))
+
+        btn_batch_sub = ctk.CTkButton(
+            batch_header,
+            text="AI Sub (Folder)",
+            width=110,
+            height=28,
+            fg_color="#1F6AA5",
+            hover_color="#144870",
+            font=("Segoe UI", 11, "bold"),
+            command=lambda: self.on_generate_ai_subtitles(sorted_all)
+        )
+        btn_batch_sub.pack(side="right", padx=4)
+
         # Render up to visible_video_limit items to prevent Tkinter freezing
         showing_vids = videos[:self.visible_video_limit]
         for vid in showing_vids:
@@ -502,7 +539,7 @@ class LibraryView(ctk.CTkFrame):
 
     def _render_all_videos_view(self, query: str) -> None:
         self.btn_back_folder.pack_forget()
-        self.lbl_path.configure(text="🎬 All Videos (Device Library)")
+        self.lbl_path.configure(text="All Videos (Device Library)")
 
         all_vids = []
         for vids in self.folders_dict.values():
@@ -536,7 +573,7 @@ class LibraryView(ctk.CTkFrame):
         next_count = min(BATCH_PAGE_SIZE, remaining)
         btn_more = ctk.CTkButton(
             self.scroll_list,
-            text=f"⬇ Load {next_count} More Videos ({self.visible_video_limit} of {total_count})",
+            text=f"Load {next_count} More Videos ({self.visible_video_limit} of {total_count})",
             height=36, fg_color="#242424", hover_color="#333333",
             font=("Segoe UI", 11, "bold"),
             command=self._load_more_videos
@@ -545,6 +582,10 @@ class LibraryView(ctk.CTkFrame):
 
     def _load_more_videos(self) -> None:
         self.visible_video_limit += BATCH_PAGE_SIZE
+        self._render_current_view()
+
+    def refresh_display(self) -> None:
+        """Re-renders current view to reflect new subtitles or updated progress."""
         self._render_current_view()
 
     # --------------------------------------------------------------------------
@@ -561,10 +602,14 @@ class LibraryView(ctk.CTkFrame):
         except Exception:
             size_str = ""
 
+        # Check for existing SRT subtitle file
+        stem = os.path.splitext(vid_path)[0]
+        has_srt = os.path.isfile(f"{stem}.srt")
+
         row = ctk.CTkFrame(self.scroll_list, fg_color="#1E1E1E", corner_radius=6, height=52)
         row.pack(fill="x", pady=3)
 
-        icon = ctk.CTkLabel(row, text="🎬", font=("Segoe UI", 16))
+        icon = ctk.CTkLabel(row, text="[V]", font=("Segoe UI", 11, "bold"), text_color="#AAB0BC")
         icon.pack(side="left", padx=(10, 8))
 
         info_box = ctk.CTkFrame(row, fg_color="transparent")
@@ -574,20 +619,23 @@ class LibraryView(ctk.CTkFrame):
         title.pack(fill="x")
 
         status_text = ""
+        if has_srt:
+            status_text = "[CC Sub]  "
+
         if resume_pos > 3000:
             sec = resume_pos // 1000
             m, s = divmod(sec, 60)
             h, m = divmod(m, 60)
             t_str = f"{h:02d}:{m:02d}:{s:02d}" if h > 0 else f"{m:02d}:{s:02d}"
-            status_text = f"Resume at {t_str} · {size_str}"
+            status_text += f"Resume at {t_str} · {size_str}"
         elif is_seen:
-            status_text = f"✓ Completed · {size_str}"
+            status_text += f"Completed · {size_str}"
         else:
-            status_text = size_str
+            status_text += size_str
 
         if show_folder_tag:
             folder_name = os.path.basename(os.path.dirname(vid_path))
-            status_text = f"📁 {folder_name}  |  {status_text}"
+            status_text = f"[{folder_name}]  |  {status_text}"
 
         sub_label = ctk.CTkLabel(info_box, text=status_text, font=("Segoe UI", 10), text_color="#A0A0A0", anchor="w")
         sub_label.pack(fill="x")
@@ -600,8 +648,15 @@ class LibraryView(ctk.CTkFrame):
         sub_label.bind("<Button-1>", play_cmd)
 
         btn_play = ctk.CTkButton(
-            row, text="▶ Play", width=68, height=30, fg_color="#FF8C00", hover_color="#FF7F00",
+            row, text="Play", width=62, height=30, fg_color="#FF8C00", hover_color="#FF7F00",
             font=("Segoe UI", 11, "bold"),
             command=lambda p=vid_path: self.on_play_video(p, context_videos)
         )
-        btn_play.pack(side="right", padx=10)
+        btn_play.pack(side="right", padx=(4, 10))
+
+        btn_ai_sub = ctk.CTkButton(
+            row, text="AI Sub", width=58, height=30, fg_color="#1F6AA5", hover_color="#144870",
+            font=("Segoe UI", 10, "bold"),
+            command=lambda p=vid_path: self.on_generate_ai_subtitles([p])
+        )
+        btn_ai_sub.pack(side="right", padx=(4, 4))

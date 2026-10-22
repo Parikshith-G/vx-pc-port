@@ -222,3 +222,9 @@ class VlcPlayer:
 
     def set_subtitle_track(self, sub_id: int) -> None:
         self.player.video_set_spu(sub_id)
+
+    def add_subtitle_file(self, srt_path: str) -> bool:
+        """Loads an external SRT subtitle file into the currently playing media."""
+        if os.path.isfile(srt_path):
+            return bool(self.player.video_set_subtitle_file(srt_path))
+        return False

@@ -13,12 +13,14 @@ import customtkinter as ctk  # type: ignore
 
 from core.history_manager import HistoryManager
 from core.natural_sort import sort_filepaths
+from core.subtitle_engine import SubtitleEngine
 from player.vlc_player import VlcPlayer
 from ui.controls_bar import ControlsBar
 from ui.header_bar import HeaderBar
 from ui.library_view import LibraryView
 from ui.osd import OsdNotification
 from ui.playlist_panel import PlaylistPanel
+from ui.subtitle_dialog import SubtitleDialog
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
@@ -37,6 +39,7 @@ class VxPlayerApp(ctk.CTk):
         self.history = HistoryManager()
         self.player = VlcPlayer()
         self.osd = OsdNotification(self)
+        self.subtitle_engine = SubtitleEngine()
 
         self.playlist: List[str] = []
         self.current_index: int = -1
@@ -79,7 +82,8 @@ class VxPlayerApp(ctk.CTk):
             get_resume_pos=self.history.get_resume_position,
             is_seen_checker=self.history.is_seen,
             recent_folders_getter=lambda: self.history.data.get("recent_folders", []),
-            on_folder_selected=self.history.add_recent_folder
+            on_folder_selected=self.history.add_recent_folder,
+            on_generate_ai_subtitles=self.open_ai_subtitle_generator
         )
         self.library_view.pack(fill="both", expand=True)
 
@@ -111,7 +115,8 @@ class VxPlayerApp(ctk.CTk):
             on_cycle_aspect=self.player.cycle_aspect_ratio,
             on_select_audio=self._show_audio_dialog,
             on_select_sub=self._show_subtitle_dialog,
-            on_toggle_fullscreen=self.toggle_fullscreen
+            on_toggle_fullscreen=self.toggle_fullscreen,
+            on_generate_ai_sub=self._generate_subtitles_for_current_video
         )
         self.header.place(relx=0, rely=0, relwidth=1.0, anchor="nw")
         self.header.lift()
@@ -512,6 +517,34 @@ class VxPlayerApp(ctk.CTk):
                 scroll, text=name, anchor="w", fg_color="#282828", hover_color="#383838",
                 command=lambda t=tid: (on_select(t), dialog.destroy())
             ).pack(fill="x", pady=2)
+
+    def _generate_subtitles_for_current_video(self) -> None:
+        """Opens AI subtitle generator for the currently active media."""
+        if self.current_index < 0 or self.current_index >= len(self.playlist):
+            self.osd.show("No active video to generate subtitles for")
+            return
+        video_path = self.playlist[self.current_index]
+        self.open_ai_subtitle_generator([video_path])
+
+    def open_ai_subtitle_generator(self, video_paths: List[str]) -> None:
+        """Opens SubtitleDialog to generate offline subtitles for selected video(s)."""
+        if not video_paths:
+            return
+
+        def on_subtitles_ready(srts: List[str]):
+            # If current video subtitle was generated, auto-load it into playback immediately
+            if self.current_index >= 0 and self.current_index < len(self.playlist):
+                curr_vid = self.playlist[self.current_index]
+                stem = os.path.splitext(curr_vid)[0]
+                expected_srt = f"{stem}.srt"
+                if expected_srt in srts and os.path.isfile(expected_srt):
+                    self.player.add_subtitle_file(expected_srt)
+                    self.osd.show("AI Subtitles Loaded")
+
+            # Update library view to display CC badges
+            self.library_view.refresh_display()
+
+        SubtitleDialog(self, video_paths, self.subtitle_engine, on_completed=on_subtitles_ready)
 
 
 # Backward compatibility alias
