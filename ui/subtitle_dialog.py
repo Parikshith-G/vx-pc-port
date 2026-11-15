@@ -33,7 +33,7 @@ class SubtitleDialog(ctk.CTkToplevel):
         self.geometry("560x420")
         self.minsize(500, 360)
         self.resizable(False, False)
-        self.configure(fg_color="#181818")
+        self.configure(fg_color="#10131A")
 
         # Keep on top of main window
         self.transient(master)
@@ -67,12 +67,12 @@ class SubtitleDialog(ctk.CTkToplevel):
             self,
             text=sub_text,
             font=("Segoe UI", 12),
-            text_color="#AAB0BC"
+            text_color="#8B98A5"
         )
         self.lbl_target.pack(anchor="w", padx=pad_x, pady=(0, 14))
 
         # Divider
-        ctk.CTkFrame(self, fg_color="#262626", height=1).pack(fill="x", padx=pad_x, pady=(0, 14))
+        ctk.CTkFrame(self, fg_color="#1E293B", height=1).pack(fill="x", padx=pad_x, pady=(0, 14))
 
         # Model Selection Row
         lbl_model_title = ctk.CTkLabel(
@@ -93,10 +93,10 @@ class SubtitleDialog(ctk.CTkToplevel):
             height=32,
             font=("Segoe UI", 12),
             dropdown_font=("Segoe UI", 11),
-            fg_color="#262626",
-            border_color="#383838",
-            button_color="#383838",
-            button_hover_color="#484848"
+            fg_color="#161B26",
+            border_color="#242B3B",
+            button_color="#1E293B",
+            button_hover_color="#27354A"
         )
         self.model_combo.pack(side="left", fill="x", expand=True, padx=(0, 8))
 
@@ -105,22 +105,23 @@ class SubtitleDialog(ctk.CTkToplevel):
             text="Browse...",
             width=80,
             height=32,
-            fg_color="#262626",
-            hover_color="#383838",
+            fg_color="#161B26",
+            hover_color="#1E293B",
+            text_color="#E0E6ED",
             font=("Segoe UI", 11),
             command=self._browse_custom_model
         )
         btn_browse_model.pack(side="right")
 
         # Quick Model Download Buttons Frame
-        self.download_frame = ctk.CTkFrame(self, fg_color="#1E1E1E", corner_radius=6)
+        self.download_frame = ctk.CTkFrame(self, fg_color="#161B26", corner_radius=6)
         self.download_frame.pack(fill="x", padx=pad_x, pady=(0, 14))
 
         ctk.CTkLabel(
             self.download_frame,
             text="Download official models (saves locally):",
             font=("Segoe UI", 11, "bold"),
-            text_color="#AAB0BC"
+            text_color="#8B98A5"
         ).pack(anchor="w", padx=12, pady=(8, 4))
 
         dl_btn_row = ctk.CTkFrame(self.download_frame, fg_color="transparent")
@@ -130,8 +131,9 @@ class SubtitleDialog(ctk.CTkToplevel):
             dl_btn_row,
             text="Small (~466 MB - Best for Kannada)",
             height=28,
-            fg_color="#262626",
-            hover_color="#383838",
+            fg_color="#1E293B",
+            hover_color="#27354A",
+            text_color="#E0E6ED",
             font=("Segoe UI", 10),
             command=lambda: self._start_model_download("small")
         )
@@ -141,8 +143,9 @@ class SubtitleDialog(ctk.CTkToplevel):
             dl_btn_row,
             text="Base (~140 MB)",
             height=28,
-            fg_color="#262626",
-            hover_color="#383838",
+            fg_color="#1E293B",
+            hover_color="#27354A",
+            text_color="#E0E6ED",
             font=("Segoe UI", 10),
             command=lambda: self._start_model_download("base")
         )
@@ -152,8 +155,9 @@ class SubtitleDialog(ctk.CTkToplevel):
             dl_btn_row,
             text="Tiny (~75 MB)",
             height=28,
-            fg_color="#262626",
-            hover_color="#383838",
+            fg_color="#1E293B",
+            hover_color="#27354A",
+            text_color="#E0E6ED",
             font=("Segoe UI", 10),
             command=lambda: self._start_model_download("tiny")
         )
@@ -167,8 +171,8 @@ class SubtitleDialog(ctk.CTkToplevel):
             variable=self.translate_var,
             font=("Segoe UI", 11),
             text_color="#FFFFFF",
-            fg_color="#1F6AA5",
-            hover_color="#144870"
+            fg_color="#0099FF",
+            hover_color="#0088EE"
         )
         self.chk_translate.pack(anchor="w", padx=pad_x, pady=(0, 14))
 
@@ -177,15 +181,15 @@ class SubtitleDialog(ctk.CTkToplevel):
             self,
             text="Ready to generate subtitles",
             font=("Segoe UI", 11),
-            text_color="#AAB0BC"
+            text_color="#8B98A5"
         )
         self.lbl_status.pack(anchor="w", padx=pad_x, pady=(0, 4))
 
         self.progress_bar = ctk.CTkProgressBar(
             self,
             height=8,
-            progress_color="#1F6AA5",
-            fg_color="#262626"
+            progress_color="#0099FF",
+            fg_color="#161B26"
         )
         self.progress_bar.set(0.0)
         self.progress_bar.pack(fill="x", padx=pad_x, pady=(0, 16))
@@ -199,8 +203,9 @@ class SubtitleDialog(ctk.CTkToplevel):
             text="Close",
             width=80,
             height=34,
-            fg_color="#262626",
-            hover_color="#383838",
+            fg_color="#161B26",
+            hover_color="#1E293B",
+            text_color="#E0E6ED",
             font=("Segoe UI", 12),
             command=self._on_close_clicked
         )
@@ -211,8 +216,8 @@ class SubtitleDialog(ctk.CTkToplevel):
             text="Generate Subtitles",
             width=160,
             height=34,
-            fg_color="#1F6AA5",
-            hover_color="#144870",
+            fg_color="#0099FF",
+            hover_color="#0088EE",
             font=("Segoe UI", 12, "bold"),
             command=self._start_generation
         )

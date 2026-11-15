@@ -58,17 +58,16 @@ class HistoryManager:
             pass
 
     def save_position(self, filepath: str, position_ms: int, duration_ms: int) -> None:
-        """Saves current playback position and marks completed if near end."""
+        """Saves current playback position and marks completed if near end (TV credit threshold)."""
         if not filepath:
             return
         
         norm_path = os.path.normpath(filepath)
         now = int(time.time())
 
-        # If watched >= 95% or within 10s of the end of a video > 30s, mark as seen
-        if duration_ms > 30000 and (position_ms >= duration_ms * 0.95 or duration_ms - position_ms <= 10000):
+        # If watched >= 90% or within 30s of the end of a video > 30s, mark as seen
+        if duration_ms > 30000 and (position_ms >= duration_ms * 0.90 or duration_ms - position_ms <= 30000):
             self.mark_as_seen(norm_path)
-            # Clear resume position once finished
             self.data["resume_positions"].pop(norm_path, None)
         elif position_ms > 3000:  # Only save if watched past 3 seconds
             self.data["resume_positions"][norm_path] = {
@@ -105,10 +104,98 @@ class HistoryManager:
         }
         self.save()
 
+    def mark_as_unseen(self, filepath: str) -> None:
+        """Removes video from seen history."""
+        norm_path = os.path.normpath(filepath)
+        if norm_path in self.data["seen_videos"]:
+            del self.data["seen_videos"][norm_path]
+            self.save()
+
+    def toggle_seen(self, filepath: str) -> bool:
+        """Toggles seen status and returns new state (True=seen, False=unseen)."""
+        norm_path = os.path.normpath(filepath)
+        if norm_path in self.data["seen_videos"]:
+            self.mark_as_unseen(norm_path)
+            return False
+        else:
+            self.mark_as_seen(norm_path)
+            return True
+
     def is_seen(self, filepath: str) -> bool:
         """Checks if video was completed or marked as seen."""
         norm_path = os.path.normpath(filepath)
         return norm_path in self.data["seen_videos"]
+
+    def get_recent_videos(self) -> List[Dict[str, Any]]:
+        """Returns list of in-progress and recently played video items."""
+        items = []
+        for path, info in self.data.get("resume_positions", {}).items():
+            if os.path.isfile(path) and isinstance(info, dict):
+                items.append({
+                    "path": path,
+                    "filename": os.path.basename(path),
+                    "position_ms": info.get("position_ms", 0),
+                    "duration_ms": info.get("duration_ms", 0),
+                    "updated_at": info.get("updated_at", 0)
+                })
+        items.sort(key=lambda x: x["updated_at"], reverse=True)
+        return items
+
+    def get_seen_videos(self) -> List[Dict[str, Any]]:
+        """Returns list of completed / seen video items."""
+        items = []
+        for path, info in self.data.get("seen_videos", {}).items():
+            if os.path.isfile(path):
+                seen_at = info.get("seen_at", 0) if isinstance(info, dict) else 0
+                items.append({
+                    "path": path,
+                    "filename": os.path.basename(path),
+                    "seen_at": seen_at
+                })
+        items.sort(key=lambda x: x["seen_at"], reverse=True)
+        return items
+
+    def delete_video(self, filepath: str) -> bool:
+        """Permanently deletes video from disk and removes from history."""
+        norm_path = os.path.normpath(filepath)
+        success = False
+        try:
+            if os.path.isfile(norm_path):
+                os.remove(norm_path)
+                success = True
+        except Exception:
+            success = False
+
+        self.data.get("resume_positions", {}).pop(norm_path, None)
+        self.data.get("seen_videos", {}).pop(norm_path, None)
+        self.save()
+        return success
+
+    def delete_all_seen(self) -> int:
+        """Permanently deletes all seen video files from disk and clears history."""
+        seen_paths = list(self.data.get("seen_videos", {}).keys())
+        deleted_count = 0
+        for path in seen_paths:
+            try:
+                if os.path.isfile(path):
+                    os.remove(path)
+                    deleted_count += 1
+            except Exception:
+                pass
+            self.data.get("seen_videos", {}).pop(path, None)
+            self.data.get("resume_positions", {}).pop(path, None)
+        self.save()
+        return deleted_count
+
+    def clear_seen_history(self) -> None:
+        """Clears seen records without deleting files from disk."""
+        self.data["seen_videos"] = {}
+        self.save()
+
+    def clear_recent_history(self) -> None:
+        """Clears recently played resume records."""
+        self.data["resume_positions"] = {}
+        self.save()
 
     def add_recent_folder(self, folder_path: str) -> None:
         """Adds folder path to recent history list."""

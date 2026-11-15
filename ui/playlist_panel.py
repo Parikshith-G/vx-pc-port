@@ -22,7 +22,7 @@ class PlaylistPanel(ctk.CTkFrame):
         on_close: Callable[[], None],
         **kwargs
     ):
-        super().__init__(master, fg_color="#1F1F1F", width=280, corner_radius=0, **kwargs)
+        super().__init__(master, fg_color="#10131A", width=280, corner_radius=0, **kwargs)
         self.on_video_selected = on_video_selected
         self.is_seen_checker = is_seen_checker
         self.on_close = on_close
@@ -33,23 +33,24 @@ class PlaylistPanel(ctk.CTkFrame):
 
     def _build_ui(self) -> None:
         # Header row
-        header = ctk.CTkFrame(self, fg_color="#181818", height=40, corner_radius=0)
+        header = ctk.CTkFrame(self, fg_color="#161B26", height=40, corner_radius=0)
         header.pack(fill="x", padx=0, pady=0)
 
         self.lbl_title = ctk.CTkLabel(
-            header, text="Playlist", font=("Segoe UI", 13, "bold"), text_color="#FFFFFF"
+            header, text="Playlist", font=("Segoe UI", 12, "bold"), text_color="#FFFFFF"
         )
         self.lbl_title.pack(side="left", padx=10, pady=6)
 
         btn_close = ctk.CTkButton(
             header, text="✕", width=28, height=26, fg_color="transparent",
-            hover_color="#333333", font=("Segoe UI", 12), command=self.on_close
+            hover_color="#1E293B", font=("Segoe UI", 12), text_color="#AAB0BC", command=self.on_close
         )
         btn_close.pack(side="right", padx=6, pady=6)
 
         # Search filter entry
         self.search_entry = ctk.CTkEntry(
-            self, placeholder_text="Filter episodes...", height=28, font=("Segoe UI", 11)
+            self, placeholder_text="Filter episodes...", height=28, font=("Segoe UI", 11),
+            fg_color="#161B26", border_color="#242B3B"
         )
         self.search_entry.pack(fill="x", padx=8, pady=(8, 4))
         self.search_entry.bind("<KeyRelease>", lambda e: self._render_items())
@@ -81,9 +82,9 @@ class PlaylistPanel(ctk.CTkFrame):
             is_seen = self.is_seen_checker(vid)
             filename = os.path.basename(vid)
 
-            bg = "#FF8C00" if is_active else "#282828"
-            hover = "#FFA500" if is_active else "#3A3A3A"
-            txt_color = "#FFFFFF" if is_active else ("#A0A0A0" if is_seen else "#E0E0E0")
+            bg = "#0099FF" if is_active else "#161B26"
+            hover = "#0088EE" if is_active else "#1E293B"
+            txt_color = "#FFFFFF" if is_active else ("#00E676" if is_seen else "#E0E6ED")
             prefix = "▶ " if is_active else ("✓ " if is_seen else "  ")
 
             btn = ctk.CTkButton(

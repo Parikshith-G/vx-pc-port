@@ -53,6 +53,8 @@ class VlcPlayer:
         self.player = self.instance.media_player_new()
         self.current_file: Optional[str] = None
         self.boost_enabled: bool = False
+        self.voice_clarity_enabled: bool = False
+        self.equalizer: Optional[Any] = None
         self.base_volume: int = 100
         self.current_speed: float = 1.0
         self.aspect_ratios = ["default", "16:9", "4:3", "16:10", "21:9"]
@@ -89,6 +91,8 @@ class VlcPlayer:
                     self.player.set_time(start_time_ms)
                 if self.current_speed != 1.0:
                     self.player.set_rate(self.current_speed)
+                if self.voice_clarity_enabled:
+                    self.apply_equalizer()
             import threading
             threading.Thread(target=delayed_setup, daemon=True).start()
 
@@ -180,6 +184,40 @@ class VlcPlayer:
         if not self.boost_enabled and self.base_volume > 100:
             self.set_volume(100)
         return self.boost_enabled
+
+    def toggle_voice_clarity(self) -> bool:
+        """Toggles ClearVoice dialogue enhancer subtractive EQ curve."""
+        self.voice_clarity_enabled = not self.voice_clarity_enabled
+        self.apply_equalizer()
+        return self.voice_clarity_enabled
+
+    def set_voice_clarity(self, enabled: bool) -> bool:
+        """Explicitly enables or disables ClearVoice dialogue enhancer."""
+        self.voice_clarity_enabled = enabled
+        self.apply_equalizer()
+        return self.voice_clarity_enabled
+
+    def apply_equalizer(self) -> None:
+        """Applies or clears the ClearVoice dialogue isolation equalizer."""
+        if not self.voice_clarity_enabled:
+            try:
+                self.player.set_equalizer(None)
+            except Exception:
+                pass
+            return
+
+        try:
+            eq = vlc.AudioEqualizer()
+            eq.set_preamp(-2.0)  # Headroom to prevent distortion/clipping
+            # 10-band subtractive EQ curve tailored for crystal-clear dialogue:
+            # Low rumble & mud attenuation (-6dB to -1.5dB) + Vocal presence boost (+5dB to +6dB)
+            band_gains = [-6.0, -5.0, -3.0, -1.5, +1.0, +5.0, +6.0, +4.5, 0.0, -2.0]
+            for idx, gain in enumerate(band_gains):
+                eq.set_amp_at_index(float(gain), idx)
+            self.equalizer = eq
+            self.player.set_equalizer(eq)
+        except Exception:
+            pass
 
     def set_speed(self, speed: float) -> None:
         """Sets playback speed multiplier (0.1x to 8.0x)."""
